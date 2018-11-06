@@ -467,6 +467,40 @@ def numpy2seq(m, c): ### output form to sequence form
 
 	return m_seq, c_seq # pianoroll type	
 
+def c_seq2pianoroll(c): 
+	c = c.reshape(-1)
+	resolution = 12
+	ratio = int(resolution/4) # 3
+	bar = int(c.shape[0]/4)
+
+	midi_c = np.zeros((resolution*bar*4, 128))
+	nextchord = -1
+	for i in range(len(c)):
+		# round
+		# midi_c[i*resolution:(i+1)*resolution-1, np.where(np.round(c[i])==1)[0]+48] = 100
+
+		# dot
+		chord = chord_name.index(c[i])
+		if i < len(c)-1 and i%4!=3:
+			nextchord = chord_name.index(c[i+1])
+		else:
+			nextchord = -1
+		
+		main = int(chord/7)
+		for j in np.where(chord_composition[chord]==1)[0]:
+			if j < main:
+				if chord == nextchord:
+					midi_c[i*resolution:(i+1)*resolution, j+60] = 100
+				else:
+					midi_c[i*resolution:(i+1)*resolution-1, j+60] = 100
+			else:
+				if chord == nextchord:
+					midi_c[i*resolution:(i+1)*resolution, j+48] = 100
+				else:
+					midi_c[i*resolution:(i+1)*resolution-1, j+48] = 100
+
+	return midi_c # pianoroll type	
+
 
 def m_roll2seq(m_roll): 
 	### turn m_roll(m, 128)-->m_seq(n,4,48)
@@ -740,7 +774,7 @@ def interp_sample(model, filename1, filename2, x, y, interp_num):
 	m = np.concatenate([x[0:1],m[1:TOTAL_LEN-1],x[1:]],0)
 	c = np.concatenate([y[0:1],c[1:TOTAL_LEN-1],y[1:]],0)
 	m_seq, c_seq = numpy2seq(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)))		
-	
+
 	# m_roll, c_roll = numpy2pianoroll(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)))		
 	# numpy2midi(m[0:interp_group].reshape((interp_group*16,200)), c[0:interp_group].reshape((interp_group*16,12)), './interp_output/'+filename1+'2'+filename2)
 	# midi2pianoroll('./interp_output/'+filename1+'2'+filename2)
