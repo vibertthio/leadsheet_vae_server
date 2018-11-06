@@ -17,6 +17,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
+
+'''
+chord convertion info
+'''
 chord_name=([
             "Cdim",
             "Cm",
@@ -218,7 +222,9 @@ chord_composition=np.array([
 	# [1,1,1,1,1,1,1,1,1,1,1,1],#no event
     [0,0,0,0,0,0,0,0,0,0,0,0] #Nothing
 ])
-
+'''
+data form convertion functions
+'''
 def parse_data(bar):
 	beat = bar*4
 	m = np.load("X.npy").astype(int)
@@ -402,7 +408,85 @@ def midi2pianoroll(filename):
 	data_bool = data_tracks.astype(bool)
 	np.save(filename+'.npy',data_bool)
 
-### interpolation
+def numpy2seq(m, c): ### output form to sequence form
+	resolution = 12
+	ratio = int(resolution/4) # 3
+	bar = int(m.shape[0]/4)
+
+	'''
+	melody processing
+	'''
+	mr = m[:,-4:].flatten()
+	m = np.argmax(m[:,:-4].reshape(m.shape[0]*4, 49), 1)
+	midi_m = np.zeros((resolution*bar*4, 128))
+	for i in range(len(m)):
+		if m[i] == 48: # stop
+			continue
+
+		if i+1 != len(m):
+			if mr[i+1] > 0.5:
+				midi_m[i*ratio:(i+1)*ratio - 1, m[i]+48] = 100
+			else:
+				midi_m[i*ratio:(i+1)*ratio, m[i]+48] = 100
+		else: #i+1 != len(m) and mr[i+1] == 0:
+			midi_m[i*ratio:(i+1)*ratio - 1, m[i]+48] = 100
+		# else: #i+1 == len(m):
+			# midi_m[i*ratio:(i+1)*ratio - 1, m[i]+48] = 100
+	
+	### turn midi_m (m, 128)--> m_seq(n,4,48)
+	m_seq = np.zeros((np.shape(midi_m)[0]))
+	for i in range(np.shape(midi_m)[0]):
+		idx = np.where(midi_m[i, :]==100)
+		#print(idx)
+		if len(idx[0])==0:
+			m_seq[i] = -1
+		else:
+			m_seq[i] = idx[0][0]		
+		#print('m_seq:',m_seq[i])
+	m_seq = m_seq.reshape((-1,4,48))
+	
+	'''
+	chord processing
+	'''
+	c_seq = np.chararray(shape = (len(c)), itemsize = 5, unicode = True)
+	#nextchord = -1
+	for i in range(len(c)):
+		if np.sum(c[i]) == 0:
+			chord = len(chord_composition)-1
+		else:
+			chord = np.argmax( np.dot(chord_composition, c[i])/(np.linalg.norm(chord_composition, axis=1)+1e-5)/(np.linalg.norm(c)+1e-5) )
+		# if i < len(c)-1 and i%4!=3:
+		# 	nextchord = np.argmax( np.dot(chord_composition, c[i+1])/(np.linalg.norm(chord_composition, axis=1)+1e-5)/(np.linalg.norm(c)+1e-5) )
+		# else:
+		# 	nextchord = -1
+		c_seq[i] = chord_name[chord]
+	
+	c_seq = c_seq.reshape((-1,4,4))
+	print('c_seq:',np.shape(c_seq))
+	print('m_seq:',np.shape(m_seq))
+
+	return m_seq, c_seq # pianoroll type	
+
+
+def m_roll2seq(m_roll): 
+	### turn m_roll(m, 128)-->m_seq(n,4,48)
+	m_seq = np.zeros((np.shape(m_roll)[0]))
+	for i in range(np.shape(m_roll)[0]):
+		idx = np.where(m_roll[i, :]==100)
+		#print(idx)
+		if len(idx[0])==0:
+			m_seq[i] = -1
+		else:
+			m_seq[i] = idx[0][0]		
+		#print('m_seq:',m_seq[i])
+	m_seq = m_seq.reshape((-1,4,48))
+	print(np.shape(m_seq))
+	return m_seq
+
+
+'''
+interpolation function
+'''
 def slerp(a, b, steps):
 	aa =  np.squeeze(a/np.linalg.norm(a))
 	bb =  np.squeeze(b/np.linalg.norm(b))
@@ -640,16 +724,27 @@ def interp_sample(model, filename1, filename2, x, y, interp_num):
 
 	mr = m[:,:,-16:] 
 	m = m[:,:,:-16] 
-	m = m.reshape(m.shape[0], m.shape[1]*4, int(m.shape[2]/4)) # m: [8, 16, 200]: beat level
-	mr = mr.reshape(mr.shape[0], mr.shape[1]*4, int(mr.shape[2]/4)) # mr: [8, 16, 12]: beat level
+	m = m.reshape(m.shape[0], m.shape[1]*4, int(m.shape[2]/4)) # m: [8, 16, 196]: beat level
+	mr = mr.reshape(mr.shape[0], mr.shape[1]*4, int(mr.shape[2]/4)) # mr: [8, 16, 4]: beat level
 	m = np.concatenate([m, mr], 2)
 
-	interp_group = interp_num + 2 # start + end + passing songs number 
-	m_roll, c_roll = numpy2pianoroll(m[0:interp_group].reshape((interp_group*16,200)), c[0:interp_group].reshape((interp_group*16,12)))		
+	x = x.cpu().detach().numpy()
+	y = y.cpu().detach().numpy() 
+	xr = x[:,:,-16:] 
+	x = x[:,:,:-16] 
+	x = x.reshape(x.shape[0], x.shape[1]*4, int(x.shape[2]/4)) # m: [8, 16, 196]: beat level
+	xr = xr.reshape(xr.shape[0], xr.shape[1]*4, int(xr.shape[2]/4)) # mr: [8, 16, 4]: beat level
+	x = np.concatenate([x, xr], 2)	
+
+	TOTAL_LEN = interp_num + 2 # start + end + passing clips number 
+	m = np.concatenate([x[0:1],m[1:TOTAL_LEN-1],x[1:]],0)
+	c = np.concatenate([y[0:1],c[1:TOTAL_LEN-1],y[1:]],0)
+	m_seq, c_seq = numpy2seq(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)))		
+	
+	# m_roll, c_roll = numpy2pianoroll(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)))		
 	# numpy2midi(m[0:interp_group].reshape((interp_group*16,200)), c[0:interp_group].reshape((interp_group*16,12)), './interp_output/'+filename1+'2'+filename2)
 	# midi2pianoroll('./interp_output/'+filename1+'2'+filename2)
-
-	return m_roll, c_roll
+	return m_seq, c_seq
 
 # ### Load training dataset
 # print('Load training dataset')
