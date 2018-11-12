@@ -8,6 +8,8 @@ import os
 from torch import nn, optim
 from torch.nn import functional as F
 from torch.autograd import Variable
+from matplotlib import pyplot as plt
+
 
 
 '''
@@ -117,6 +119,107 @@ chord_name=([
             "Bm7",            
             "B7",            
             "BM7",
+
+			# "no event",
+            "Nothing"
+])
+
+chord_name_v2=([
+            "Co",
+            "Cm",
+            "CM",
+            "CM#5",
+            "Cm7",
+            "C7",
+            "CMaj7",
+
+            "Dbo",
+            "Dbm",
+            "DbM",
+            "DbM#5",
+            "Dbm7",
+            "Db7",
+            "DbMaj7",
+
+            "Do",
+            "Dm",
+            "DM",
+            "DM#5",
+            "Dm7",
+            "D7",
+            "DMaj7",
+
+            "Ebo",
+            "Ebm",
+            "EbM",
+            "EbM#5",
+            "Ebm7",
+            "Eb7",
+            "EbMaj7",
+
+            "Eo",
+            "Em",
+            "EM",
+            "EM#5",
+            "Em7",
+            "E7",
+            "EMaj7",
+
+            "Fo",
+            "Fm",
+            "FM",
+            "FM#5",
+            "Fm7",
+            "F7",
+            "FMaj7",
+
+            "Gbo",
+            "Gbm",
+            "GbM",
+            "GbM#5",
+            "Gbm7",
+            "Gb7",
+            "GbMaj7",
+
+            "Go",
+            "Gm",
+            "GM",
+            "GM#5",
+            "Gm7",
+            "G7",
+            "GMaj7",
+
+            "Abo",
+            "Abm",
+            "AbM",
+            "AbM#5",
+            "Abm7",
+            "Ab7",
+            "AbMaj7",
+
+            "Ao",
+            "Am",
+            "AM",
+            "AM#5",
+            "Am7",
+            "A7",
+            "AMaj7",
+
+            "Bbo",
+            "Bbm",
+            "BbM",
+            "BbM#5",
+            "Bbm7",
+            "Bb7",
+            "BbMaj7",
+
+            "Bo",
+            "Bm",
+            "BM",
+            "BM#5",
+            "Bm7",            
+            "B7",            
+            "BMaj7",
 
 			# "no event",
             "Nothing"
@@ -255,8 +358,11 @@ def parse_data(bar):
 
 def midi2numpy(filename, b): # b: how many bars per group
 	midi = Multitrack(filename, beat_resolution=12)
+	tempo = int(midi.tempo[0])
+
 	m = midi.tracks[0].pianoroll
 	c = midi.tracks[1].pianoroll
+
 	bar = int(m.shape[0]/12/4)
 	bar = int(bar - bar%8) # only take 8k bars
 
@@ -264,12 +370,13 @@ def midi2numpy(filename, b): # b: how many bars per group
 	x1 = np.zeros((bar*16, 49)) # 48~96
 	x2 = np.zeros((bar*16, 1))
 	for i in range(x1.shape[0]):
-		if np.sum(m[i*unit]>0) > 0:
-			x1[i, np.where(m[i*unit]>0)[0][0] - 48] = 1
+		
+		if np.sum(m[i*unit+1]>0) > 0:
+			x1[i, np.where(m[i*unit+1]>0)[0][0] - 48] = 1
 		else:
 			x1[i, 48] = 1
 
-		if i != 0 and np.sum(m[i*unit]==m[i*unit-1]) == 128:
+		if i != 0 and np.sum(m[i*unit+1]==m[i*unit-1]) == 128:
 			x2[i,0] = 0
 		else:
 			x2[i,0] = 1
@@ -277,8 +384,9 @@ def midi2numpy(filename, b): # b: how many bars per group
 	unit = 12
 	y = np.zeros((bar*4, 12))
 	for i in range(y.shape[0]):
-		if np.sum(c[i*unit]>0) > 0:
-			for note in np.where(c[i*unit]>0)[0]%12:
+		if np.sum(c[i*unit+1]>0) > 0:
+			print(np.where(c[i*unit+1]>0)[0]%12)
+			for note in np.where(c[i*unit+1]>0)[0]%12:
 				y[i, note] = 1
 
 	# 4bar
@@ -287,9 +395,9 @@ def midi2numpy(filename, b): # b: how many bars per group
 	x = np.concatenate([x1, x2], 2)
 	y = y.reshape((int(bar/b), b, 12*4)) # (12 chroma x 4 timesteps) / bar
 
-	return x, y
+	return x, y, tempo
 
-def numpy2midi(m, c, filename):
+def numpy2midi(m, c, theta, filename):
 	resolution = 12
 	ratio = int(resolution/4) # 3
 	bar = int(m.shape[0]/4)
@@ -302,12 +410,12 @@ def numpy2midi(m, c, filename):
 			continue
 
 		if i+1 != len(m):
-			if mr[i+1] > 0.5:
+			if mr[i+1] > theta and m[i+1]==m[i]:
 				midi_m[i*ratio:(i+1)*ratio - 1, m[i]+48] = 100
 			else:
 				midi_m[i*ratio:(i+1)*ratio, m[i]+48] = 100
 		else: #i+1 != len(m) and mr[i+1] == 0:
-			midi_m[i*ratio:(i+1)*ratio - 1, m[i]+48] = 100
+			midi_m[i*ratio:(i+1)*ratio, m[i]+48] = 100
 		# else: #i+1 == len(m):
 			# midi_m[i*ratio:(i+1)*ratio - 1, m[i]+48] = 100
 
@@ -408,7 +516,8 @@ def midi2pianoroll(filename):
 	data_bool = data_tracks.astype(bool)
 	np.save(filename+'.npy',data_bool)
 
-def numpy2seq(m, c): ### output form to sequence form
+def numpy2seq(m, c, theta): ### output form to sequence form
+	# theta: 0 ~ 1 as the threshold for melody rhythm (mr)
 	resolution = 12
 	ratio = int(resolution/4) # 3
 	bar = int(m.shape[0]/4)
@@ -424,12 +533,12 @@ def numpy2seq(m, c): ### output form to sequence form
 			continue
 
 		if i+1 != len(m):
-			if mr[i+1] > 0.5:
+			if mr[i+1] > theta and m[i+1]==m[i]:
 				midi_m[i*ratio:(i+1)*ratio - 1, m[i]+48] = 100
 			else:
 				midi_m[i*ratio:(i+1)*ratio, m[i]+48] = 100
 		else: #i+1 != len(m) and mr[i+1] == 0:
-			midi_m[i*ratio:(i+1)*ratio - 1, m[i]+48] = 100
+			midi_m[i*ratio:(i+1)*ratio, m[i]+48] = 100
 		# else: #i+1 == len(m):
 			# midi_m[i*ratio:(i+1)*ratio - 1, m[i]+48] = 100
 	
@@ -459,7 +568,7 @@ def numpy2seq(m, c): ### output form to sequence form
 		# 	nextchord = np.argmax( np.dot(chord_composition, c[i+1])/(np.linalg.norm(chord_composition, axis=1)+1e-5)/(np.linalg.norm(c)+1e-5) )
 		# else:
 		# 	nextchord = -1
-		c_seq[i] = chord_name[chord]
+		c_seq[i] = chord_name_v2[chord]
 	
 	c_seq = c_seq.reshape((-1,4,4))
 	print('c_seq:',np.shape(c_seq))
@@ -467,6 +576,39 @@ def numpy2seq(m, c): ### output form to sequence form
 
 	return m_seq, c_seq # pianoroll type	
 
+def seq2numpy(m_seq, c_seq):
+	m_seq = m_seq.reshape(-1) # (4,48)-->(192)
+	c_seq = c_seq.reshape(-1) # (4,4)-->(16)
+	bar = 4
+	b = 4 # how many bars per group
+	unit = 3
+	x1 = np.zeros((bar*16, 49)) # 48~96
+	x2 = np.zeros((bar*16, 1))
+
+	for i in range(x1.shape[0]):
+		if m_seq[i*unit]==-1:
+			x1[i, 48] = 1
+		else:
+			x1[i, m_seq[i*unit]-48] = 1
+
+		if i != 0 and (m_seq[i*unit]==m_seq[i*unit-1]):
+			x2[i,0] = 0
+		else:
+			x2[i,0] = 1
+	
+	y = np.zeros((bar*4, 12))
+	for i in range(y.shape[0]):
+		chord = chord_name_v2.index(c_seq[i])
+		y[i] = chord_composition[chord]
+
+	# 4bar
+	x1 = x1.reshape((int(bar/b), b, 49*16)) # (49 pitches x 16 timesteps) / bar
+	x2 = x2.reshape((int(bar/b), b, 1*16)) # (1 onset x 16 timesteps) /bar
+	x = np.concatenate([x1, x2], 2)
+	y = y.reshape((int(bar/b), b, 12*4)) # (12 chroma x 4 timesteps) / bar
+
+	return x, y
+	
 def c_seq2pianoroll(c): 
 	c = c.reshape(-1)
 	resolution = 12
@@ -480,9 +622,9 @@ def c_seq2pianoroll(c):
 		# midi_c[i*resolution:(i+1)*resolution-1, np.where(np.round(c[i])==1)[0]+48] = 100
 
 		# dot
-		chord = chord_name.index(c[i])
+		chord = chord_name_v2.index(c[i])
 		if i < len(c)-1 and i%4!=3:
-			nextchord = chord_name.index(c[i+1])
+			nextchord = chord_name_v2.index(c[i+1])
 		else:
 			nextchord = -1
 		
@@ -500,8 +642,8 @@ def c_seq2pianoroll(c):
 					midi_c[i*resolution:(i+1)*resolution-1, j+48] = 100
 
 	return midi_c # pianoroll type	
-
-
+	x1 = np.zeros((bar*16, 49)) # 48~96
+	x2 = np.zeros((bar*16, 1))
 def m_roll2seq(m_roll): 
 	### turn m_roll(m, 128)-->m_seq(n,4,48)
 	m_seq = np.zeros((np.shape(m_roll)[0]))
@@ -737,8 +879,8 @@ def test_vae(model, epoch):
 
 
 def load_midi(filename1, filename2, unit_len):
-	x1,y1 = midi2numpy(filename1, unit_len) # [2,4,200]
-	x2,y2 = midi2numpy(filename2, unit_len) # [4,4,200]
+	x1, y1, tempo1 = midi2numpy(filename1, unit_len) # [2,4,200]
+	x2, y2, tempo2 = midi2numpy(filename2, unit_len) # [4,4,200]
 	x1 = x1[0:1]
 	y1 = y1[0:1]
 	x2 = x2[0:1]
@@ -748,15 +890,28 @@ def load_midi(filename1, filename2, unit_len):
 	x = torch.from_numpy(x).type(torch.FloatTensor)
 	y = np.concatenate([y1,y2], 0)
 	y = torch.from_numpy(y).type(torch.FloatTensor)
+	tempo = np.array([tempo1,tempo2])
+	tempo = torch.from_numpy(tempo).type(torch.FloatTensor)
+	return x, y, tempo
 
+def load_seq(m_seq1, c_seq1, m_seq2, c_seq2):
+	x1, y1 = seq2numpy(m_seq1, c_seq1)
+	x2, y2 = seq2numpy(m_seq2, c_seq2)
+
+	x = np.concatenate([x1,x2], 0)
+	x = torch.from_numpy(x).type(torch.FloatTensor)
+	y = np.concatenate([y1,y2], 0)
+	y = torch.from_numpy(y).type(torch.FloatTensor)
+	
 	return x, y
+	
 
-def interp_sample(model, filename1, filename2, x, y, interp_num):
+def interp_sample(model, x, y, interp_num, theta):
 	m, c, mu, var = model.interpolation(x.cuda(), y.cuda(), interp_num)
 	m = m.cpu().detach().numpy() # [8, 4, 800]: bar level
 	c = c.cpu().detach().numpy() # [8, 4, 48]: bar level
 
-	mr = m[:,:,-16:] 
+	mr = m[:,:,-16:]
 	m = m[:,:,:-16] 
 	m = m.reshape(m.shape[0], m.shape[1]*4, int(m.shape[2]/4)) # m: [8, 16, 196]: beat level
 	mr = mr.reshape(mr.shape[0], mr.shape[1]*4, int(mr.shape[2]/4)) # mr: [8, 16, 4]: beat level
@@ -769,16 +924,22 @@ def interp_sample(model, filename1, filename2, x, y, interp_num):
 	x = x.reshape(x.shape[0], x.shape[1]*4, int(x.shape[2]/4)) # m: [8, 16, 196]: beat level
 	xr = xr.reshape(xr.shape[0], xr.shape[1]*4, int(xr.shape[2]/4)) # mr: [8, 16, 4]: beat level
 	x = np.concatenate([x, xr], 2)	
-
+	
 	TOTAL_LEN = interp_num + 2 # start + end + passing clips number 
 	m = np.concatenate([x[0:1],m[1:TOTAL_LEN-1],x[1:]],0)
 	c = np.concatenate([y[0:1],c[1:TOTAL_LEN-1],y[1:]],0)
-	m_seq, c_seq = numpy2seq(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)))		
+	m_seq, c_seq = numpy2seq(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)), theta)		
 
+	# tempo_seq = np.linspace(tempo[0], tempo[1], num=(interp_num+2)).round().astype(int)
 	# m_roll, c_roll = numpy2pianoroll(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)))		
-	# numpy2midi(m[0:interp_group].reshape((interp_group*16,200)), c[0:interp_group].reshape((interp_group*16,12)), './interp_output/'+filename1+'2'+filename2)
+	numpy2midi(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)),theta, './interp_output/'+'test.mid')
+		
 	# midi2pianoroll('./interp_output/'+filename1+'2'+filename2)
-	return m_seq, c_seq
+	
+	#print(tempo_seq)
+	#print(len(tempo_seq))
+	
+	return m_seq, c_seq # m_seq(n, 4, 48), c_seq(n, 4, 4), tempo_seq(n)
 
 # ### Load training dataset
 # print('Load training dataset')
