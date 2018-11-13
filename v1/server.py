@@ -76,8 +76,8 @@ def static():
         
         song1 = path + songfiles[1] # heyjude
         song2 = path + songfiles[2] # someonelikeyou
-        print('song1:',song1)
-        print('song2:',song2)
+        # print('song1:',song1)
+        # print('song2:',song2)
         m, c, tempo = model.load_midi(song1, song2, UNIT_LEN)
         m_seq, c_seq = model.interp_sample(vae, m, c, INTERP_NUM, RHYTHM_THRESHOLD)
     response_pickled = numpy2json(m_seq, c_seq, tempo)
@@ -97,8 +97,8 @@ def static_twosong(s1, s2, num):
         
         song1 = path + songfiles[int(s1)]
         song2 = path + songfiles[int(s2)]
-        print('song1:',song1)
-        print('song2:',song2)
+        # print('song1:',song1)
+        # print('song2:',song2)
         m, c, tempo = model.load_midi(song1, song2, UNIT_LEN)
         m_seq, c_seq = model.interp_sample(vae, m, c, INTERP_NUM, RHYTHM_THRESHOLD)
     response_pickled = numpy2json(m_seq, c_seq, tempo)

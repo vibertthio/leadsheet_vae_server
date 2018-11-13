@@ -385,7 +385,7 @@ def midi2numpy(filename, b): # b: how many bars per group
 	y = np.zeros((bar*4, 12))
 	for i in range(y.shape[0]):
 		if np.sum(c[i*unit+1]>0) > 0:
-			print(np.where(c[i*unit+1]>0)[0]%12)
+			# print(np.where(c[i*unit+1]>0)[0]%12)
 			for note in np.where(c[i*unit+1]>0)[0]%12:
 				y[i, note] = 1
 
@@ -571,8 +571,8 @@ def numpy2seq(m, c, theta): ### output form to sequence form
 		c_seq[i] = chord_name_v2[chord]
 	
 	c_seq = c_seq.reshape((-1,4,4))
-	print('c_seq:',np.shape(c_seq))
-	print('m_seq:',np.shape(m_seq))
+	# print('c_seq:',np.shape(c_seq))
+	# print('m_seq:',np.shape(m_seq))
 
 	return m_seq, c_seq # pianoroll type	
 
@@ -730,7 +730,7 @@ class VAE(nn.Module):
 		m = m.view(m.shape[0], 1, m.shape[1])
 		for i in range(self.timestep):
 			m, _ = self.BGRUm2(m)
-			melody[:,i,:] = F.sigmoid(self.outm(m[:,0,:]))
+			melody[:,i,:] = torch.sigmoid(self.outm(m[:,0,:]))
 
 		chord = torch.zeros((z.shape[0], self.timestep, 48)).cuda()
 
@@ -738,7 +738,7 @@ class VAE(nn.Module):
 		c = c.view(c.shape[0], 1, c.shape[1])
 		for i in range(self.timestep):
 			c, _ = self.BGRUc2(c)
-			chord[:,i,:] = F.sigmoid(self.outc(c[:,0,:]))
+			chord[:,i,:] = torch.sigmoid(self.outc(c[:,0,:]))
 
 		return melody, chord
 
@@ -932,7 +932,7 @@ def interp_sample(model, x, y, interp_num, theta):
 
 	# tempo_seq = np.linspace(tempo[0], tempo[1], num=(interp_num+2)).round().astype(int)
 	# m_roll, c_roll = numpy2pianoroll(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)))		
-	numpy2midi(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)),theta, './interp_output/'+'test.mid')
+	# numpy2midi(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)),theta, './interp_output/'+'test.mid')
 		
 	# midi2pianoroll('./interp_output/'+filename1+'2'+filename2)
 	
