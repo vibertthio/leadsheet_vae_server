@@ -15,7 +15,6 @@ app.config['ENV'] = 'development'
 CORS(app)
 USE_CUDA = torch.cuda.is_available()
 
-
 '''
 load model
 '''
@@ -30,15 +29,15 @@ else:
     vae.load_state_dict(torch.load(path + checkpt, map_location='cpu'))
 
 '''
-load data
+global variables
 '''
 ### two songs for interpolation
 UNIT_LEN = 4 # the length for encode and decode
-INTERP_NUM = 6 # number of interpolated samples between
+INTERP_NUM = 7 # number of interpolated samples between
 TOTAL_LEN = (INTERP_NUM+2)*4
 RHYTHM_THRESHOLD = 0.6 # number: 0~1
-# SONG1 = 'payphone'
-# SONG2 = 'someonelikeyou'
+TEMPO = np.array([100, 100])
+SONGNAME = np.array(['pay phone.mid','some one like you.mid'])
 # m, c = load_midi(SONG1, SONG2, UNIT_LEN)
 # m_roll, c_roll = interp_sample(vae, SONG1, SONG2, m, c, INTERP_NUM)
 
@@ -54,18 +53,23 @@ load preset
 utils
 '''
 ### numpytojson
-def numpy2json(m, c, tempo):
+def numpy2json(m, c, tempo, songnames, theta):
     out_melody = m.tolist() # (n, 4, 48)
     out_chord = c.tolist() #(n, 4, 4)
-    out_tempo = tempo.tolist() #(n)
+    out_tempo = tempo.tolist() #(2)
+    out_songnames = songnames.tolist() #(2)
+    out_theta = theta #(1)
     #print(type(out_melody))
     response = {
         'melody': out_melody,
         'chord': out_chord,
         'tempo': out_tempo,
+        'songnames': out_songnames,
+        'theta': out_theta,
     }
     response_pickled = json.dumps(response)
     return response_pickled
+
 
 '''
 api route
@@ -78,18 +82,25 @@ def static():
         global TOTAL_LEN
         global path
         global RHYTHM_THRESHOLD
+        global TEMPO
+        global SONGNAME
         
         song1 = path + songfiles[1] # heyjude
         song2 = path + songfiles[2] # someonelikeyou
+
         # print('song1:',song1)
         # print('song2:',song2)
         m, c, tempo = model.load_midi(song1, song2, UNIT_LEN)
         m_seq, c_seq = model.interp_sample(vae, m, c, INTERP_NUM, RHYTHM_THRESHOLD)
-    response_pickled = numpy2json(m_seq, c_seq, tempo)
+
+        TEMPO = tempo
+        SONGNAME = np.array([songfiles[1],songfiles[2]]) 
+
+    response_pickled = numpy2json(m_seq, c_seq, TEMPO, SONGNAME, RHYTHM_THRESHOLD)
     return Response(response=response_pickled, status=200, mimetype="application/json")
 
 
-@app.route('/static/<s1>/<s2>', methods=['GET'], endpoint='static_twosong_1', defaults={'num': 7})
+@app.route('/static/<s1>/<s2>', methods=['GET'], endpoint='static_twosong_1', defaults={'num': 15})
 @app.route('/static/<s1>/<s2>/<num>', methods=['GET'], endpoint='static_twosong_1')
 def static_twosong(s1, s2, num):
     with torch.no_grad():
@@ -97,50 +108,107 @@ def static_twosong(s1, s2, num):
         global INTERP_NUM
         global TOTAL_LEN
         global path
+        global RHYTHM_THRESHOLD
+        global TEMPO
+        global SONGNAME
         INTERP_NUM = num # number of interp group
         # TOTAL_LEN = (INTERP_NUM + 2)*4 # number of group * 4bar = total bars
         
         song1 = path + songfiles[int(s1)]
         song2 = path + songfiles[int(s2)]
+
         # print('song1:',song1)
         # print('song2:',song2)
         m, c, tempo = model.load_midi(song1, song2, UNIT_LEN)
         m_seq, c_seq = model.interp_sample(vae, m, c, INTERP_NUM, RHYTHM_THRESHOLD)
-    response_pickled = numpy2json(m_seq, c_seq, tempo)
+
+        TEMPO = tempo
+        SONGNAME = np.array([songfiles[int(s1)],songfiles[int(s2)]])    
+
+    response_pickled = numpy2json(m_seq, c_seq, TEMPO, SONGNAME, RHYTHM_THRESHOLD)
     return Response(response=response_pickled, status=200, mimetype="application/json")
 
-@app.route('/api/content', methods=['POST'])
-def content():
+@app.route('/api/melody_chord', methods=['POST'])
+def melody_chord():
     r = request.json
-    # r_json = json.loads(r)
-    r_json = r
+    if (type(r) == dict):
+        r_json = r
+    else:
+        r_json = json.loads(r)
+        
     m1 = r_json['m_seq_1']
     c1 = r_json['c_seq_1']
     m2 = r_json['m_seq_2']
     c2 = r_json['c_seq_2']
-    t1 = r_json['tempo_1']
-    t2 = r_json['tempo_2']
-    theta_temp = r_json['theta']
 
     m_seq1 = np.asarray(m1).astype(int)
     c_seq1 = np.asarray(c1)
     m_seq2 = np.asarray(m2).astype(int)
     c_seq2 = np.asarray(c2)
-    tempo_1 = np.asarray(t1)
-    tempo_2 = np.asarray(t2)
-    theta = np.float(theta_temp)
-
-    tempo = np.array([tempo_1, tempo_2])
 
     with torch.no_grad():
-        global RHYTHM_THRESHOLD
-        RHYTHM_THRESHOLD = theta
-
         m, c = model.load_seq(m_seq1, c_seq1, m_seq2, c_seq2)
         m_seq, c_seq = model.interp_sample(vae, m, c, INTERP_NUM, RHYTHM_THRESHOLD)
 
-    response_pickled = numpy2json(m_seq, c_seq, tempo)
+    response_pickled = numpy2json(m_seq, c_seq, TEMPO, SONGNAME, RHYTHM_THRESHOLD)
     return Response(response=response_pickled, status=200, mimetype="application/json")
+
+@app.route('/api/theta', methods=['POST'])
+def theta():
+    global RHYTHM_THRESHOLD
+    global SONGNAME
+    r = request.json
+    if (type(r) == dict):
+        r_json = r
+    else:
+        r_json = json.loads(r)
+
+    theta_temp = r_json['theta']
+
+    theta = np.float(theta_temp)
+
+    with torch.no_grad():
+
+        RHYTHM_THRESHOLD = theta
+
+        song1 = path + SONGNAME[0] # heyjude
+        song2 = path + SONGNAME[1] # someonelikeyou
+
+        # print('song1:',song1)
+        # print('song2:',song2)
+        m, c, tempo = model.load_midi(song1, song2, UNIT_LEN)
+        m_seq, c_seq = model.interp_sample(vae, m, c, INTERP_NUM, RHYTHM_THRESHOLD)
+
+    response_pickled = numpy2json(m_seq, c_seq, TEMPO, SONGNAME, RHYTHM_THRESHOLD)
+    return Response(response=response_pickled, status=200, mimetype="application/json")
+
+@app.route('/api/tempos', methods=['POST'])
+def tempos():
+    global TEMPO
+    global SONGNAME
+    r = request.json
+    if (type(r) == dict):
+        r_json = r
+    else:
+        r_json = json.loads(r)
+
+    t1 = r_json['tempo_1']
+    t2 = r_json['tempo_2']
+
+    tempo_1 = np.asarray(t1)
+    tempo_2 = np.asarray(t2)
+
+    TEMPO = np.array([tempo_1, tempo_2])
+
+    song1 = path + SONGNAME[0] # heyjude
+    song2 = path + SONGNAME[1] # someonelikeyou
+
+    m, c, tempo = model.load_midi(song1, song2, UNIT_LEN)
+    m_seq, c_seq = model.interp_sample(vae, m, c, INTERP_NUM, RHYTHM_THRESHOLD)
+
+    response_pickled = numpy2json(m_seq, c_seq, TEMPO, SONGNAME, RHYTHM_THRESHOLD)
+    return Response(response=response_pickled, status=200, mimetype="application/json")
+
 '''
 start app
 '''
