@@ -724,7 +724,9 @@ class VAE(nn.Module):
 		return z
 
 	def decode(self, z):
-		melody = torch.zeros((z.shape[0], self.timestep, 800)).cuda()
+		melody = torch.zeros((z.shape[0], self.timestep, 800))
+		if use_cuda:
+			melody = melody.cuda()
 		
 		m = self.lat2hidm(z)
 		m = m.view(m.shape[0], 1, m.shape[1])
@@ -732,7 +734,9 @@ class VAE(nn.Module):
 			m, _ = self.BGRUm2(m)
 			melody[:,i,:] = torch.sigmoid(self.outm(m[:,0,:]))
 
-		chord = torch.zeros((z.shape[0], self.timestep, 48)).cuda()
+		chord = torch.zeros((z.shape[0], self.timestep, 48))
+		if use_cuda:
+			chord = chord.cuda()
 
 		c = self.lat2hidc(z)
 		c = c.view(c.shape[0], 1, c.shape[1])
@@ -785,7 +789,10 @@ class VAE(nn.Module):
 		interp = z[a].reshape(1, z.shape[1]) # a: the start clip
 		interp = np.concatenate([interp, np.array(slerp(z[a], z[b], interp_num))]) # passing clips
 		interp = np.concatenate([interp, z[b].reshape(1, z.shape[1])]) #b: the end clip
-		z = torch.from_numpy(interp).cuda()	
+		if (use_cuda):
+			z = torch.from_numpy(interp).cuda()	
+		else:
+			z = torch.from_numpy(interp)
 		
 		### decode	
 		m, c = self.decode(z)
@@ -907,7 +914,10 @@ def load_seq(m_seq1, c_seq1, m_seq2, c_seq2):
 	
 
 def interp_sample(model, x, y, interp_num, theta):
-	m, c, mu, var = model.interpolation(x.cuda(), y.cuda(), interp_num)
+	if use_cuda:
+		m, c, mu, var = model.interpolation(x.cuda(), y.cuda(), interp_num)
+	else:
+		m, c, mu, var = model.interpolation(x, y, interp_num)
 	m = m.cpu().detach().numpy() # [8, 4, 800]: bar level
 	c = c.cpu().detach().numpy() # [8, 4, 48]: bar level
 
