@@ -726,8 +726,8 @@ class VAE(nn.Module):
 	def decode(self, z):
 		melody = torch.zeros((z.shape[0], self.timestep, 800))
 		if use_cuda:
-			melody = melody.cuda()
-		
+			melody = melody.cuda()	
+
 		m = self.lat2hidm(z)
 		m = m.view(m.shape[0], 1, m.shape[1])
 		for i in range(self.timestep):
@@ -736,7 +736,7 @@ class VAE(nn.Module):
 
 		chord = torch.zeros((z.shape[0], self.timestep, 48))
 		if use_cuda:
-			chord = chord.cuda()
+			chord = chord.cuda()		
 
 		c = self.lat2hidc(z)
 		c = c.view(c.shape[0], 1, c.shape[1])
@@ -914,42 +914,42 @@ def load_seq(m_seq1, c_seq1, m_seq2, c_seq2):
 	
 
 def interp_sample(model, x, y, interp_num, theta):
-	if use_cuda:
-		m, c, mu, var = model.interpolation(x.cuda(), y.cuda(), interp_num)
-	else:
-		m, c, mu, var = model.interpolation(x, y, interp_num)
-	m = m.cpu().detach().numpy() # [8, 4, 800]: bar level
-	c = c.cpu().detach().numpy() # [8, 4, 48]: bar level
+    if use_cuda:
+        m, c, mu, var = model.interpolation(x.cuda(), y.cuda(), interp_num)
+    else:
+        m, c, mu, var = model.interpolation(x, y, interp_num)
+    m = m.cpu().detach().numpy() # [8, 4, 800]: bar level
+    c = c.cpu().detach().numpy() # [8, 4, 48]: bar level
 
-	mr = m[:,:,-16:]
-	m = m[:,:,:-16] 
-	m = m.reshape(m.shape[0], m.shape[1]*4, int(m.shape[2]/4)) # m: [8, 16, 196]: beat level
-	mr = mr.reshape(mr.shape[0], mr.shape[1]*4, int(mr.shape[2]/4)) # mr: [8, 16, 4]: beat level
-	m = np.concatenate([m, mr], 2)
+    mr = m[:,:,-16:]
+    m = m[:,:,:-16] 
+    m = m.reshape(m.shape[0], m.shape[1]*4, int(m.shape[2]/4)) # m: [8, 16, 196]: beat level
+    mr = mr.reshape(mr.shape[0], mr.shape[1]*4, int(mr.shape[2]/4)) # mr: [8, 16, 4]: beat level
+    m = np.concatenate([m, mr], 2)
 
-	x = x.cpu().detach().numpy()
-	y = y.cpu().detach().numpy() 
-	xr = x[:,:,-16:] 
-	x = x[:,:,:-16] 
-	x = x.reshape(x.shape[0], x.shape[1]*4, int(x.shape[2]/4)) # m: [8, 16, 196]: beat level
-	xr = xr.reshape(xr.shape[0], xr.shape[1]*4, int(xr.shape[2]/4)) # mr: [8, 16, 4]: beat level
-	x = np.concatenate([x, xr], 2)	
-	
-	TOTAL_LEN = interp_num + 2 # start + end + passing clips number 
-	m = np.concatenate([x[0:1],m[1:TOTAL_LEN-1],x[1:]],0)
-	c = np.concatenate([y[0:1],c[1:TOTAL_LEN-1],y[1:]],0)
-	m_seq, c_seq = numpy2seq(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)), theta)		
+    x = x.cpu().detach().numpy()
+    y = y.cpu().detach().numpy() 
+    xr = x[:,:,-16:] 
+    x = x[:,:,:-16] 
+    x = x.reshape(x.shape[0], x.shape[1]*4, int(x.shape[2]/4)) # m: [8, 16, 196]: beat level
+    xr = xr.reshape(xr.shape[0], xr.shape[1]*4, int(xr.shape[2]/4)) # mr: [8, 16, 4]: beat level
+    x = np.concatenate([x, xr], 2)	
 
-	# tempo_seq = np.linspace(tempo[0], tempo[1], num=(interp_num+2)).round().astype(int)
-	# m_roll, c_roll = numpy2pianoroll(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)))		
-	# numpy2midi(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)),theta, './interp_output/'+'test.mid')
-		
-	# midi2pianoroll('./interp_output/'+filename1+'2'+filename2)
-	
-	#print(tempo_seq)
-	#print(len(tempo_seq))
-	
-	return m_seq, c_seq # m_seq(n, 4, 48), c_seq(n, 4, 4), tempo_seq(n)
+    TOTAL_LEN = interp_num + 2 # start + end + passing clips number 
+    m = np.concatenate([x[0:1],m[1:TOTAL_LEN-1],x[1:]],0)
+    c = np.concatenate([y[0:1],c[1:TOTAL_LEN-1],y[1:]],0)
+    m_seq, c_seq = numpy2seq(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)), theta)		
+
+    # tempo_seq = np.linspace(tempo[0], tempo[1], num=(interp_num+2)).round().astype(int)
+    # m_roll, c_roll = numpy2pianoroll(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)))		
+    # numpy2midi(m[0:TOTAL_LEN].reshape((TOTAL_LEN*16,200)), c[0:TOTAL_LEN].reshape((TOTAL_LEN*16,12)),theta, './interp_output/'+'test.mid')
+        
+    # midi2pianoroll('./interp_output/'+filename1+'2'+filename2)
+
+    #print(tempo_seq)
+    #print(len(tempo_seq))
+
+    return m_seq, c_seq # m_seq(n, 4, 48), c_seq(n, 4, 4), tempo_seq(n)
 
 # ### Load training dataset
 # print('Load training dataset')
@@ -1004,4 +1004,3 @@ def interp_sample(model, x, y, interp_num, theta):
 # print('interpolation sampling')
 # m_roll, c_roll = interp_sample(model, SONG1, SONG2, m, c, INTERP_NUM)
 # print(np.shape(m_roll))
-
