@@ -13,6 +13,8 @@ import vae_4bar as model
 app = Flask(__name__)
 app.config['ENV'] = 'development'
 CORS(app)
+USE_CUDA = torch.cuda.is_available()
+
 
 '''
 load model
@@ -22,7 +24,10 @@ checkpt = [ m for m in os.listdir(path) if '.pt' in m ][0]
 songfiles = [m for m in os.listdir(path) if '.midi' in m]
 print(songfiles)
 vae = model.VAE(hidden_m=256, hidden_c=48, bar=4).to(model.device)
-vae.load_state_dict(torch.load(path + checkpt))
+if USE_CUDA:
+    vae.load_state_dict(torch.load(path + checkpt))
+else:
+    vae.load_state_dict(torch.load(path + checkpt, map_location='cpu'))
 
 '''
 load data
@@ -107,7 +112,8 @@ def static_twosong(s1, s2, num):
 @app.route('/api/content', methods=['POST'])
 def content():
     r = request.json
-    r_json = json.loads(r)
+    # r_json = json.loads(r)
+    r_json = r
     m1 = r_json['m_seq_1']
     c1 = r_json['c_seq_1']
     m2 = r_json['m_seq_2']
